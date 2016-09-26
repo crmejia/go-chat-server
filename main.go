@@ -2,31 +2,45 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"net"
 )
 
 func main() {
-	addr := net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 2016}
-	// Listen on port UDP 2016
-	listener, err := net.ListenUDP("udp", &addr)
+	// Listen on port TPC 2016
+	listener, err := net.Listen("tcp", ":2016")
 	if err != nil {
-		return
+		log.Fatal(err)
 	}
 	defer listener.Close()
 
 	for {
-		//read buff
-		buffer := make([]byte, 1024)
-		blen, _, err := listener.ReadFromUDP(buffer)
+		//wait for connection
+		conn, err := listener.Accept()
 		if err != nil {
-			return
+			log.Fatal(err)
 		}
-		message := string(buffer[:blen])
-		if message == "/quit" {
-			fmt.Println("quit message recieved. Bye.")
-			return
-		}
-		fmt.Println(message)
+
+		//run goroutines to deal with multiple connections
+		go messageReader(conn)
+
+	}
+}
+
+func messageReader(conn net.Conn) {
+	//read buff
+	buffer := make([]byte, 1024)
+	blen, err := conn.Read(buffer)
+	if err != nil {
+		log.Fatal(err)
 	}
 
+	message := string(buffer[:blen])
+	// This quits the connetion at least when using netcat
+	//TODO look fo the right way to close
+	if message == "/quit" {
+		fmt.Println("quit message recieved. Bye.")
+		return
+	}
+	fmt.Println(message)
 }
