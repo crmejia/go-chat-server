@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"strings"
 	"sync"
 )
 
@@ -46,29 +47,33 @@ func (s *Server) unregister(conn net.Conn) {
 }
 
 func (s *Server) messageReader(conn net.Conn) {
-	//read buff
+	defer conn.Close()
 	buffer := make([]byte, 1024)
-	blen, err := conn.Read(buffer)
-	if err != nil {
-		log.Fatal(err)
-	}
+	for {
+		//read buff
+		blen, err := conn.Read(buffer)
+		message := string(buffer[:blen])
 
-	message := string(buffer[:blen])
-	// This quits the connetion at least when using netcat
-	//TODO look fo the right way to close
-	if message == "/quit" {
-		fmt.Println("quit command received. Bye.")
+		if message == "/quit" {
+			fmt.Println("quit command received. Bye.")
+			return
+		}
 
-		s.unregister(conn)
-		return
+		if blen > 0 && !strings.ContainsAny(message, "EOF") {
+			fmt.Println(message)
+		}
+
+		if err != nil && !strings.ContainsAny(err.Error(), "EOF") {
+			log.Println("hi")
+			log.Println(err)
+			return
+		}
 	}
-	fmt.Println(message)
-	// time.Sleep(100 * time.Millisecond)
 }
 
 // Run Start up the server. Manages join and leave chat
 func (s *Server) Run() {
-	// Listen on port TPC 2016
+	// Listen on port TCP 2016
 	listener, err := net.Listen("tcp", ":2016")
 	if err != nil {
 		log.Fatal(err)
@@ -82,12 +87,7 @@ func (s *Server) Run() {
 			log.Fatal(err)
 		}
 
-		//register the client
-		if s.register(conn) {
-			//run goroutines to deal with multiple connections
-			go s.messageReader(conn)
-		} else {
-			log.Println("Already registed  |----| " + conn.RemoteAddr().String())
-		}
+		go s.messageReader(conn)
+
 	}
 }
