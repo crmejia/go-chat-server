@@ -16,6 +16,7 @@ type Server struct {
 
 // New server creation
 func New() Server {
+	log.Println("Firing up server!")
 	return Server{list: make(map[string]net.Conn)}
 }
 
@@ -32,7 +33,7 @@ func (s *Server) register(conn net.Conn) bool {
 	if s.list[conn.RemoteAddr().String()] == nil {
 		s.mux.Lock()
 		s.list[conn.RemoteAddr().String()] = conn
-		log.Println("registered remote |----|  " + conn.RemoteAddr().String())
+		log.Println("logged |----|  " + conn.RemoteAddr().String())
 		s.mux.Unlock()
 		return true
 	}
@@ -43,6 +44,8 @@ func (s *Server) register(conn net.Conn) bool {
 func (s *Server) unregister(conn net.Conn) {
 	s.mux.Lock()
 	delete(s.list, conn.RemoteAddr().String())
+	log.Println("unlogged |----|  " + conn.RemoteAddr().String())
+	log.Println("quit command received. Bye.")
 	s.mux.Unlock()
 }
 
@@ -55,18 +58,27 @@ func (s *Server) messageReader(conn net.Conn) {
 		message := string(buffer[:blen])
 
 		if message == "/quit" {
-			fmt.Println("quit command received. Bye.")
+			s.unregister(conn)
 			return
 		}
 
 		if blen > 0 && !strings.ContainsAny(message, "EOF") {
 			fmt.Println(message)
+			s.broadcast(conn, message)
 		}
 
 		if err != nil && !strings.ContainsAny(err.Error(), "EOF") {
-			log.Println("hi")
 			log.Println(err)
 			return
+		}
+	}
+}
+
+func (s *Server) broadcast(from net.Conn, message string) {
+	for address, to := range s.list {
+		if to != from {
+			log.Println("message to: " + address)
+			to.Write([]byte(message))
 		}
 	}
 }
@@ -83,11 +95,13 @@ func (s *Server) Run() {
 	for {
 		//wait for connection
 		conn, err := listener.Accept()
+		conn.Write([]byte("welcome to the servar"))
+
 		if err != nil {
-			log.Fatal(err)
+			log.Println(err)
+		} else {
+			s.register(conn)
+			go s.messageReader(conn)
 		}
-
-		go s.messageReader(conn)
-
 	}
 }
